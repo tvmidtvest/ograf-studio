@@ -1,11 +1,14 @@
 # Bygger og pusher Docker-imaget til GHCR. Kører i tvmidtvest-forken.
 #
-# Pusher du upstreams tag (fx `git push fork v0.18`), bygges og pushes:
-#   ghcr.io/tvmidtvest/ograf-studio:0.18, :sha-<commit>, :latest
-# Upstreams tags peger på commits UDEN deploy/-mappen, så workflow'et checker
-# altid forkens default-branch (main) ud og bruger kun tagget som version.
-# Dockerfilen henter upstream-releasens Linux-binary for samme tag, så tagget
-# skal findes som release på zerodensity/ograf-studio.
+# Trigger: et fork-eget tag `docker-v<version>` sat på forkens main, fx
+#   git tag docker-v0.18 main && git push fork docker-v0.18
+# Det bygger og pusher ghcr.io/tvmidtvest/ograf-studio:0.18, :sha-<commit>, :latest.
+#
+# Upstreams egne tags (v0.18) kan IKKE bruges som trigger: GitHub læser
+# workflow-filer fra den commit, tagget peger på, og upstreams commits
+# indeholder hverken denne fil eller deploy/-mappen. Derfor eget tag-præfiks.
+# Dockerfilen henter upstream-releasens Linux-binary for `v<version>`, så
+# releasen skal findes på zerodensity/ograf-studio.
 #
 # Efter push kaldes Portainer-webhook'en (secret PORTAINER_WEBHOOK) → auto-redeploy.
 name: Build & push Docker image
@@ -13,7 +16,7 @@ name: Build & push Docker image
 on:
   push:
     tags:
-      - 'v*'
+      - 'docker-v*'
   workflow_dispatch:
     inputs:
       ograf_version:
@@ -32,10 +35,8 @@ jobs:
     env:
       PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
     steps:
-      - name: Checkout default branch (deploy/ findes ikke på upstream-tags)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
 
       - name: Resolve upstream release tag
         id: version
@@ -44,6 +45,7 @@ jobs:
             tag="${{ inputs.ograf_version }}"
           else
             tag="${{ github.ref_name }}"
+            tag="v${tag#docker-v}"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"

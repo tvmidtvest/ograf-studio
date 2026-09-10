@@ -56,6 +56,8 @@ Vi har kun læseadgang til upstream-repoet.
   MCP-klienter (fx Claude Code) skal konfigureres med en Basic-header.
 - Labelen `basic_auth` kræver Caddy >= 2.8. På ældre Caddy hedder direktivet
   `basicauth`.
-- Ny upstream-version deployes ved at pushe upstream-tagget til forken;
-  workflow'et bygger image med samme versionsnummer.
+- Ny upstream-version deployes med et fork-eget tag på forkens `main`:
+  `git tag docker-v0.18 main && git push fork docker-v0.18`. Upstreams tags
+  kan ikke bruges som trigger, fordi GitHub læser workflow-filer fra tag-
+  commit'en, og den indeholder hverken workflow'et eller `deploy/`.
 - Healthchecket går gennem socat-porten, så en død bro opdages.
