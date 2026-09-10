@@ -1,0 +1,52 @@
+services:
+  ograf-studio:
+    # Image bygges og pushes til GHCR af .github/workflows/release-docker.yml
+    # (kører i tvmidtvest-forken). Pin en version pr. host, fx `IMAGE_TAG=0.17`.
+    image: ghcr.io/tvmidtvest/ograf-studio:${IMAGE_TAG:-latest}
+    container_name: tvmv-ograf-studio
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      caddy: 'ograf-studio.hz02.tvmv.dk'
+      # Basic auth for hele sitet (editor, /mcp, /editor-websocket, /health).
+      # Bruger: tvmv. Hash er bcrypt fra `caddy hash-password`. `$` er
+      # escaped som `$$`, fordi compose ellers interpolerer. Ny hash:
+      #   docker run --rm caddy:2 caddy hash-password --plaintext '<password>'
+      # Kræver Caddy >= 2.8. På ældre Caddy hedder direktivet `basicauth`.
+      caddy.basic_auth.tvmv: '$$2a$$14$$.MgNBLHr7dlKSnCUq2kn1OilHonzSVJZvdDk7VM5AmPWmRVyNr8hm'
+      caddy.reverse_proxy: '{{upstreams 8080}}'
+      # Serveren afviser alle Host-headere undtagen localhost/127.0.0.1/[::1]
+      # (DNS-rebinding-beskyttelse fra MCP-SDK'et). Caddy skal derfor
+      # omskrive Host, ellers svarer alt med 403.
+      caddy.reverse_proxy.header_up: 'Host 127.0.0.1'
+    environment:
+      - TZ=${TZ:-Europe/Copenhagen}
+      # Projekter gemmes her; mappet til named volume nedenfor.
+      - OGRAF_WORKSPACE_ROOT=/data/workspace
+      # Valgfri AI-agent i editoren (se deploy/.env.example). Tomme værdier
+      # betyder "slået fra" — serveren kører fint uden.
+      - OGRAF_AGENT_PROVIDER=${OGRAF_AGENT_PROVIDER:-}
+      - OGRAF_AGENT_API_KEY=${OGRAF_AGENT_API_KEY:-}
+      - OGRAF_AGENT_MODEL=${OGRAF_AGENT_MODEL:-}
+      - OGRAF_AGENT_CHEAP_MODEL=${OGRAF_AGENT_CHEAP_MODEL:-}
+      - OGRAF_AGENT_BASE_URL=${OGRAF_AGENT_BASE_URL:-}
+      - OGRAF_AGENT_EFFORT=${OGRAF_AGENT_EFFORT:-}
+      - IMAGE_TAG=${IMAGE_TAG:-latest}
+    volumes:
+      - ograf-workspace:/data/workspace
+    healthcheck:
+      # Går gennem socat-porten (8080), så både bro og server testes.
+      # Host-headeren bliver 127.0.0.1:8080 -> hostname 127.0.0.1 -> tilladt.
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8080/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  ograf-workspace:
+
+networks:
+  proxy:
+    external: true
